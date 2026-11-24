@@ -1,0 +1,80 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "type": "udp",
+        "tag": "dns-remote",
+        "server": "8.8.8.8",
+        "detour": "proxy"
+      },
+      {
+        "type": "local",
+        "tag": "dns-local"
+      }
+    ],
+    "final": "dns-remote",
+    "strategy": "prefer_ipv4"
+  },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "127.0.0.1",
+      "listen_port": 2080
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "proxy",
+      "server": "play.rowstonsoftware.com",
+      "server_port": 443,
+      "uuid": "a750d63d-3348-4f8b-be6a-be17606aff60",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "dl.google.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "npglY0nkJZ16gJ-AmWkt30hf1zgikjNRN9BhPUOKVnQ",
+          "short_id": "0123456789abcdef"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "block",
+      "tag": "block"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "final": "proxy",
+    "default_domain_resolver": "dns-local",
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "direct"
+      }
+    ]
+  }
+}
