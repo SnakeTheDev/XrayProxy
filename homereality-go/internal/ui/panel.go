@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"embed"
+	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
