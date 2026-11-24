@@ -1,4 +1,4 @@
-name: Build
+﻿name: Build
 
 on:
   push:
@@ -42,6 +42,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22.x"
+          cache-dependency-path: homereality-go/go.sum
 
       - name: Install Linux GUI deps
         if: runner.os == 'Linux'
@@ -64,13 +65,14 @@ jobs:
 
       - name: Package
         working-directory: .
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p dist/pkg
-          cp dist/${{ matrix.artifact }} dist/pkg/
-          cp homereality-go/sing-box-config.json dist/pkg/
-          cd dist/pkg
-          zip -r ../../HomeReality-${{ matrix.goos }}-${{ matrix.goarch }}.zip .
+          New-Item -ItemType Directory -Force -Path dist/pkg | Out-Null
+          Copy-Item "dist/${{ matrix.artifact }}" dist/pkg/
+          Copy-Item "homereality-go/sing-box-config.json" dist/pkg/
+          $zipName = "HomeReality-${{ matrix.goos }}-${{ matrix.goarch }}.zip"
+          if (Test-Path $zipName) { Remove-Item $zipName -Force }
+          Compress-Archive -Path dist/pkg/* -DestinationPath $zipName -Force
 
       - uses: actions/upload-artifact@v4
         with:
