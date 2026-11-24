@@ -122,7 +122,6 @@ func (p *Panel) build() {
 
 	p.errLabel = canvas.NewText("", ColRed)
 	p.errLabel.TextSize = 11
-	p.errLabel.Wrapping = fyne.TextWrapWord
 
 	mkBtn := func(label string, fn func()) *widget.Button {
 		b := widget.NewButton(label, fn)
