@@ -1,7 +1,8 @@
 # Home-Reality (Go + Fyne)
 
-Cross-platform desktop client for the Home-Reality / RSNet proxy.  
-One dark panel with a large toggle — styled to match the existing Windows tray UI as closely as Fyne allows.
+Cross-platform system-tray client for the Home-Reality / RSNet proxy.
+
+The app starts hidden and is controlled from its native notification-area / menu-bar icon. It does not open a separate panel window on startup.
 
 **Supported:** Windows, macOS, Linux
 
@@ -9,10 +10,10 @@ One dark panel with a large toggle — styled to match the existing Windows tray
 
 ## Features
 
-- Large on/off **toggle** (green / grey / amber busy)
-- Status line + uptime
-- Info card: Host, Local, Core, Type
-- **Copy URI**, **Log**, **Folder**, **Quit**
+- Native system-tray icon with an embedded PNG resource
+- Tray menu with connection status and **Turn On / Turn Off**
+- **Copy VLESS URI**, **Open log**, **Open application folder**, **Quit**
+- No visible Fyne window on startup
 - Auto-downloads **sing-box 1.14.0** on first run
 - Sets system HTTP/HTTPS proxy (and SOCKS on macOS)
 - Restores previous proxy settings when you turn off

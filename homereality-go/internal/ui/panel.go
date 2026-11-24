@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,6 +20,9 @@ import (
 	"github.com/SnakeTheDev/XrayProxy/homereality-go/internal/download"
 	"github.com/SnakeTheDev/XrayProxy/homereality-go/internal/proxy"
 )
+
+//go:embed assets/home-reality-tray.png
+var trayIconPNG []byte
 
 const (
 	AppName    = "Home-Reality"
@@ -44,7 +48,9 @@ type Panel struct {
 	vCore    *canvas.Text
 	vType    *canvas.Text
 	busy     bool
+	miStatus *fyne.MenuItem
 	miToggle *fyne.MenuItem
+	trayMenu *fyne.Menu
 }
 
 func NewPanel(a fyne.App, dir string) *Panel {
@@ -85,19 +91,33 @@ func (p *Panel) setupTray() {
 		return
 	}
 
+	// Use a real, embedded PNG instead of Fyne's default icon. This avoids
+	// depending on an external file and gives Windows a valid tray resource.
+	desk.SetSystemTrayIcon(fyne.NewStaticResource("home-reality-tray.png", trayIconPNG))
+
+	p.miStatus = fyne.NewMenuItem("Status: Disconnected", nil)
+	p.miStatus.Disabled = true
 	p.miToggle = fyne.NewMenuItem("Turn On", func() { p.onToggle() })
-	openItem := fyne.NewMenuItem("Open panel", func() { p.Show() })
+	copyItem := fyne.NewMenuItem("Copy VLESS URI", func() { p.copyURI() })
+	logItem := fyne.NewMenuItem("Open log", func() { p.openLog() })
+	folderItem := fyne.NewMenuItem("Open application folder", func() { p.openFolder() })
 	quitItem := fyne.NewMenuItem("Quit", func() { p.quit() })
 
-	menu := fyne.NewMenu(AppName,
-		openItem,
+	p.trayMenu = fyne.NewMenu(AppName,
+		p.miStatus,
+		fyne.NewMenuItemSeparator(),
 		p.miToggle,
+		fyne.NewMenuItemSeparator(),
+		copyItem,
+		logItem,
+		folderItem,
 		fyne.NewMenuItemSeparator(),
 		quitItem,
 	)
-	desk.SetSystemTrayMenu(menu)
+	desk.SetSystemTrayMenu(p.trayMenu)
 
-	// Closing the window hides to tray (does not quit)
+	// The window is retained only as an invisible Fyne application owner and
+	// clipboard provider. The tray menu is the user-facing interface.
 	p.win.SetCloseIntercept(func() {
 		p.win.Hide()
 	})
@@ -248,6 +268,9 @@ func (p *Panel) refresh() {
 	running := p.core.Running()
 	if p.busy {
 		p.toggle.SetState(2)
+		if p.miStatus != nil {
+			p.miStatus.Label = "Status: Working…"
+		}
 		p.status.Text = "Working…"
 		p.status.Color = ColAmber
 		p.sub.Text = ""
@@ -256,6 +279,9 @@ func (p *Panel) refresh() {
 		}
 	} else if running {
 		p.toggle.SetState(1)
+		if p.miStatus != nil {
+			p.miStatus.Label = "Status: Connected"
+		}
 		p.status.Text = "Connected"
 		p.status.Color = ColGreen
 		up := ""
@@ -268,6 +294,9 @@ func (p *Panel) refresh() {
 		}
 	} else {
 		p.toggle.SetState(0)
+		if p.miStatus != nil {
+			p.miStatus.Label = "Status: Disconnected"
+		}
 		p.status.Text = "Disconnected"
 		p.status.Color = ColRed
 		p.sub.Text = "Tap the switch to connect"
@@ -277,6 +306,10 @@ func (p *Panel) refresh() {
 	}
 	p.status.Refresh()
 	p.sub.Refresh()
+
+	if desk, ok := p.app.(desktop.App); ok && p.trayMenu != nil {
+		desk.SetSystemTrayMenu(p.trayMenu)
+	}
 
 	if p.core.HasBinary() {
 		p.vCore.Text = "sing-box " + download.Version

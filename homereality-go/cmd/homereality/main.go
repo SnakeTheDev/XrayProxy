@@ -34,8 +34,8 @@ func main() {
 		_ = ui.EnsureConfig(dir, cfgSrc)
 	}
 
-	panel := ui.NewPanel(a, dir)
-	// Show once so you can find it; X / close hides to system tray.
-	panel.Show()
+	// NewPanel installs the native system-tray icon and menu. Do not show
+	// the Fyne window: the Windows notification-area menu is the interface.
+	_ = ui.NewPanel(a, dir)
 	a.Run()
 }
