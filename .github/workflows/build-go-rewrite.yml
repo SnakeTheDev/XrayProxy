@@ -1,0 +1,78 @@
+name: Build
+
+on:
+  push:
+    branches: [go-rewrite, main]
+  pull_request:
+    branches: [go-rewrite, main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            artifact: HomeReality-windows-amd64.exe
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            artifact: HomeReality-darwin-arm64
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            artifact: HomeReality-darwin-amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            artifact: HomeReality-linux-amd64
+
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        working-directory: homereality-go
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+
+      - name: Install Linux GUI deps
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxxf86vm-dev
+
+      - name: Download modules
+        run: go mod tidy
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "1"
+        run: |
+          mkdir -p ../dist
+          go build -ldflags "-s -w" -o ../dist/${{ matrix.artifact }} ./cmd/homereality
+
+      - name: Package
+        working-directory: .
+        shell: bash
+        run: |
+          mkdir -p dist/pkg
+          cp dist/${{ matrix.artifact }} dist/pkg/
+          cp homereality-go/sing-box-config.json dist/pkg/
+          cd dist/pkg
+          zip -r ../../HomeReality-${{ matrix.goos }}-${{ matrix.goarch }}.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HomeReality-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: HomeReality-${{ matrix.goos }}-${{ matrix.goarch }}.zip
