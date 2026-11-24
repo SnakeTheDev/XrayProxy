@@ -18,7 +18,7 @@ type winProxy struct {
 }
 
 type savedWin struct {
-	ProxyEnable uint32 `json:"proxy_enable"`
+	ProxyEnable   uint64 `json:"proxy_enable"`
 	ProxyServer string `json:"proxy_server"`
 	ProxyOverride string `json:"proxy_override"`
 }
@@ -50,7 +50,7 @@ func (w *winProxy) Enable() error {
 	_ = writeJSON(w.savePath, s)
 
 	server := fmt.Sprintf("%s:%d", LocalHost, LocalPort)
-	if err := k.SetDWordValue("ProxyEnable", 1); err != nil {
+	if err := k.SetDWordValue("ProxyEnable", uint32(1)); err != nil {
 		return err
 	}
 	if err := k.SetStringValue("ProxyServer", server); err != nil {
@@ -75,7 +75,7 @@ func (w *winProxy) Disable() error {
 
 	var s savedWin
 	if err := readJSON(w.savePath, &s); err == nil {
-		_ = k.SetDWordValue("ProxyEnable", s.ProxyEnable)
+		_ = k.SetDWordValue("ProxyEnable", uint32(s.ProxyEnable))
 		_ = k.SetStringValue("ProxyServer", s.ProxyServer)
 		_ = k.SetStringValue("ProxyOverride", s.ProxyOverride)
 		_ = os.Remove(w.savePath)
