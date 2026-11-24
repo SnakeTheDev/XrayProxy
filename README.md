@@ -1,3 +1,8 @@
+## Download
+
+- [Windows](https://github.com/SnakeTheDev/XrayProxy/releases/latest/download/HomeReality-Windows.zip)
+- [macOS](https://github.com/SnakeTheDev/XrayProxy/releases/latest/download/HomeReality-macOS.zip)
+
 # XrayProxy (Home-Reality)
 
 Simple system-proxy client for **Windows** and **macOS**.  
