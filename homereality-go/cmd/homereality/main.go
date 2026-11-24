@@ -12,7 +12,6 @@ import (
 
 func main() {
 	a := app.NewWithID("com.homereality.client")
-	a.SetIcon(nil)
 
 	dir, err := ui.DataDir()
 	if err != nil {
@@ -20,7 +19,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Prefer config beside the binary; also try working directory / repo root.
 	candidates := []string{
 		filepath.Join(dir, "sing-box-config.json"),
 		"sing-box-config.json",
@@ -37,6 +35,7 @@ func main() {
 	}
 
 	panel := ui.NewPanel(a, dir)
+	// Show once so you can find it; X / close hides to system tray.
 	panel.Show()
 	a.Run()
 }

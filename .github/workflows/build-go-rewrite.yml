@@ -1,4 +1,4 @@
-﻿name: Build
+name: Build
 
 on:
   push:
@@ -60,21 +60,12 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "1"
         run: |
-          mkdir -p ../dist
-          go build -ldflags "-s -w" -o ../dist/${{ matrix.artifact }} ./cmd/homereality
+          mkdir -p ../dist/pkg
+          go build -ldflags "-s -w" -o ../dist/pkg/${{ matrix.artifact }} ./cmd/homereality
+          cp sing-box-config.json ../dist/pkg/
 
-      - name: Package
-        working-directory: .
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist/pkg | Out-Null
-          Copy-Item "dist/${{ matrix.artifact }}" dist/pkg/
-          Copy-Item "homereality-go/sing-box-config.json" dist/pkg/
-          $zipName = "HomeReality-${{ matrix.goos }}-${{ matrix.goarch }}.zip"
-          if (Test-Path $zipName) { Remove-Item $zipName -Force }
-          Compress-Archive -Path dist/pkg/* -DestinationPath $zipName -Force
-
+      # upload-artifact already compresses — do not zip again
       - uses: actions/upload-artifact@v4
         with:
           name: HomeReality-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: HomeReality-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+          path: dist/pkg/

@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 
@@ -20,19 +21,19 @@ import (
 )
 
 const (
-	AppName   = "Home-Reality"
+	AppName    = "Home-Reality"
 	ServerHost = "play.rowstonsoftware.com"
 	ServerPort = 443
 	LocalProxy = "127.0.0.1:2080"
-	ShareURI  = "vless://a750d63d-3348-4f8b-be6a-be17606aff60@play.rowstonsoftware.com:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=dl.google.com&fp=chrome&pbk=npglY0nkJZ16gJ-AmWkt30hf1zgikjNRN9BhPUOKVnQ&sid=0123456789abcdef&type=tcp#Home-Reality"
+	ShareURI   = "vless://a750d63d-3348-4f8b-be6a-be17606aff60@play.rowstonsoftware.com:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=dl.google.com&fp=chrome&pbk=npglY0nkJZ16gJ-AmWkt30hf1zgikjNRN9BhPUOKVnQ&sid=0123456789abcdef&type=tcp#Home-Reality"
 )
 
 type Panel struct {
-	win     fyne.Window
-	app     fyne.App
-	core    *core.Manager
-	proxy   proxy.Controller
-	dir     string
+	win   fyne.Window
+	app   fyne.App
+	core  *core.Manager
+	proxy proxy.Controller
+	dir   string
 
 	toggle   *Toggle
 	status   *canvas.Text
@@ -43,6 +44,7 @@ type Panel struct {
 	vCore    *canvas.Text
 	vType    *canvas.Text
 	busy     bool
+	miToggle *fyne.MenuItem
 }
 
 func NewPanel(a fyne.App, dir string) *Panel {
@@ -60,14 +62,46 @@ func NewPanel(a fyne.App, dir string) *Panel {
 		proxy: proxy.New(dir),
 	}
 	p.build()
+	p.setupTray()
 	p.refresh()
 	go p.poll()
 	go p.ensureCore()
 	return p
 }
 
-func (p *Panel) Show() { p.win.Show() }
+func (p *Panel) Show() {
+	p.refresh()
+	p.win.Show()
+	p.win.RequestFocus()
+}
+
+func (p *Panel) Hide() { p.win.Hide() }
+
 func (p *Panel) Window() fyne.Window { return p.win }
+
+func (p *Panel) setupTray() {
+	desk, ok := p.app.(desktop.App)
+	if !ok {
+		return
+	}
+
+	p.miToggle = fyne.NewMenuItem("Turn On", func() { p.onToggle() })
+	openItem := fyne.NewMenuItem("Open panel", func() { p.Show() })
+	quitItem := fyne.NewMenuItem("Quit", func() { p.quit() })
+
+	menu := fyne.NewMenu(AppName,
+		openItem,
+		p.miToggle,
+		fyne.NewMenuItemSeparator(),
+		quitItem,
+	)
+	desk.SetSystemTrayMenu(menu)
+
+	// Closing the window hides to tray (does not quit)
+	p.win.SetCloseIntercept(func() {
+		p.win.Hide()
+	})
+}
 
 func (p *Panel) build() {
 	title := canvas.NewText(AppName, ColText)
@@ -93,7 +127,6 @@ func (p *Panel) build() {
 	p.sub.TextSize = 12
 	p.sub.Alignment = fyne.TextAlignCenter
 
-	// info card
 	p.vHost = canvas.NewText(fmt.Sprintf("%s:%d", ServerHost, ServerPort), ColText)
 	p.vHost.TextSize = 12
 	p.vLocal = canvas.NewText(LocalProxy, ColText)
@@ -106,7 +139,6 @@ func (p *Panel) build() {
 	row := func(label string, val *canvas.Text) fyne.CanvasObject {
 		l := canvas.NewText(label, ColMuted)
 		l.TextSize = 12
-		l.Resize(fyne.NewSize(56, 20))
 		return container.NewBorder(nil, nil, l, nil, val)
 	}
 
@@ -150,10 +182,6 @@ func (p *Panel) build() {
 
 	bg := canvas.NewRectangle(ColBg)
 	p.win.SetContent(container.NewStack(bg, container.NewPadded(content)))
-	p.win.SetCloseIntercept(func() {
-		// hide instead of quit — tray-like behaviour when we add desk tray later
-		p.win.Hide()
-	})
 }
 
 func (p *Panel) onToggle() {
@@ -223,6 +251,9 @@ func (p *Panel) refresh() {
 		p.status.Text = "Working…"
 		p.status.Color = ColAmber
 		p.sub.Text = ""
+		if p.miToggle != nil {
+			p.miToggle.Label = "…"
+		}
 	} else if running {
 		p.toggle.SetState(1)
 		p.status.Text = "Connected"
@@ -232,11 +263,17 @@ func (p *Panel) refresh() {
 			up = "Up " + formatUp(time.Since(t)) + "  ·  "
 		}
 		p.sub.Text = up + LocalProxy
+		if p.miToggle != nil {
+			p.miToggle.Label = "Turn Off"
+		}
 	} else {
 		p.toggle.SetState(0)
 		p.status.Text = "Disconnected"
 		p.status.Color = ColRed
 		p.sub.Text = "Tap the switch to connect"
+		if p.miToggle != nil {
+			p.miToggle.Label = "Turn On"
+		}
 	}
 	p.status.Refresh()
 	p.sub.Refresh()
@@ -253,7 +290,6 @@ func (p *Panel) poll() {
 	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
 	for range t.C {
-		// if core died, clear stale system proxy
 		if !p.busy && !p.core.Running() && p.proxy.IsOurs() {
 			_ = p.proxy.Disable()
 		}
@@ -324,7 +360,6 @@ func openPath(path string) {
 	_ = cmd.Start()
 }
 
-// EnsureConfig copies embedded/default config into dir if missing.
 func EnsureConfig(dir, example string) error {
 	dst := filepath.Join(dir, "sing-box-config.json")
 	if _, err := os.Stat(dst); err == nil {
@@ -338,13 +373,11 @@ func EnsureConfig(dir, example string) error {
 }
 
 func DataDir() (string, error) {
-	// Prefer folder next to executable so portable installs work.
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err
 	}
 	dir := filepath.Dir(exe)
-	// If running from `go run`, fall back to cwd
 	if _, err := os.Stat(filepath.Join(dir, "sing-box-config.json")); err != nil {
 		if cwd, e := os.Getwd(); e == nil {
 			if _, e2 := os.Stat(filepath.Join(cwd, "sing-box-config.json")); e2 == nil {
@@ -354,4 +387,3 @@ func DataDir() (string, error) {
 	}
 	return dir, nil
 }
-
