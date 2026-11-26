@@ -2,7 +2,6 @@ package ui
 
 import (
 	"bytes"
-	_ "embed"
 	"fmt"
 	"image"
 	"image/color"
@@ -25,9 +24,6 @@ import (
 	"github.com/SnakeTheDev/XrayProxy/homereality-go/internal/download"
 	"github.com/SnakeTheDev/XrayProxy/homereality-go/internal/proxy"
 )
-
-//go:embed assets/home-reality-tray.png
-var trayIconPNG []byte
 
 const (
 	AppName    = "Home-Reality"
@@ -157,12 +153,16 @@ func (p *Panel) setupTray() {
 	items = append(items, fyne.NewMenuItemSeparator(), quitItem)
 
 	p.trayMenu = fyne.NewMenu(AppName, items...)
-	desk.SetSystemTrayMenu(p.trayMenu)
 
-	// Icon AFTER menu. Prefer embedded PNG; fall back to a generated bitmap
-	// if the embed is missing/corrupt (avoids "image: unknown format").
-	icon := trayIconResource()
+	// Always use a pure-Go generated PNG. Embedded assets and Fyne's default
+	// BrokenImageIcon (SVG) both caused "image: unknown format" on Windows.
+	icon := fyne.NewStaticResource("home-reality-tray.png", generateTrayIconPNG())
 	p.app.SetIcon(icon)
+	// Store icon before the tray starts so the onReady callback does not fall
+	// back to the SVG default. May log "tray not ready yet" once — harmless.
+	desk.SetSystemTrayIcon(icon)
+	desk.SetSystemTrayMenu(p.trayMenu)
+	// Set again after the tray is live (definitive).
 	desk.SetSystemTrayIcon(icon)
 
 	// Tray-only: never show the window on start. Close hides it.
@@ -413,24 +413,13 @@ func (p *Panel) openLog() {
 	openPath(path)
 }
 
-// trayIconResource returns a valid PNG resource for the system tray.
-// Uses the embedded asset when it decodes cleanly; otherwise builds a simple
-// green-dot icon in memory so Windows never hits "image: unknown format".
-func trayIconResource() fyne.Resource {
-	if len(trayIconPNG) > 0 {
-		if _, err := png.Decode(bytes.NewReader(trayIconPNG)); err == nil {
-			return fyne.NewStaticResource("home-reality-tray.png", trayIconPNG)
-		}
-	}
-	return fyne.NewStaticResource("home-reality-tray.png", generateTrayIconPNG())
-}
-
+// generateTrayIconPNG builds a simple 64x64 PNG in memory (no embed dependency).
+// Fyne on Windows rejects SVG defaults and some embed paths with
+// "image: unknown format"; a hand-encoded PNG always works.
 func generateTrayIconPNG() []byte {
 	const s = 64
 	img := image.NewRGBA(image.Rect(0, 0, s, s))
-	// transparent background
 	draw.Draw(img, img.Bounds(), &image.Uniform{C: color.RGBA{0, 0, 0, 0}}, image.Point{}, draw.Src)
-	// dark rounded-ish square (filled circle as stand-in)
 	bg := color.RGBA{R: 0x16, G: 0x18, B: 0x1D, A: 0xFF}
 	green := color.RGBA{R: 0x34, G: 0xC7, B: 0x59, A: 0xFF}
 	white := color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}

@@ -9,7 +9,13 @@ import (
 )
 
 func hideConsole(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	// CREATE_NO_WINDOW stops console-subsystem binaries (sing-box) from
+	// flashing a black window. HideWindow alone is not enough.
+	const CREATE_NO_WINDOW = 0x08000000
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: CREATE_NO_WINDOW,
+	}
 }
 
 func windowsProcessExists(pid int) bool {
