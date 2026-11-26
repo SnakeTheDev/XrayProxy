@@ -61,7 +61,13 @@ jobs:
           CGO_ENABLED: "1"
         run: |
           mkdir -p ../dist/pkg
-          go build -ldflags "-s -w" -o ../dist/pkg/${{ matrix.artifact }} ./cmd/homereality
+          # Windows: -H windowsgui = no console window (tray-only app).
+          # Logs go to app.log next to the exe. Set HOMEREALITY_DEBUG=1 for console builds.
+          LDFLAGS="-s -w"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            LDFLAGS="-s -w -H windowsgui"
+          fi
+          go build -ldflags "$LDFLAGS" -o ../dist/pkg/${{ matrix.artifact }} ./cmd/homereality
           cp sing-box-config.json ../dist/pkg/
 
       # upload-artifact already compresses — do not zip again

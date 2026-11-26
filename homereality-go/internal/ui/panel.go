@@ -1,8 +1,13 @@
 package ui
 
 import (
+	"bytes"
 	_ "embed"
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -102,9 +107,41 @@ func (p *Panel) setupTray() {
 	copyItem := fyne.NewMenuItem("Copy VLESS URI", func() { p.copyURI() })
 	logItem := fyne.NewMenuItem("Open log", func() { p.openLog() })
 	folderItem := fyne.NewMenuItem("Open application folder", func() { p.openFolder() })
+
+	var autoItem *fyne.MenuItem
+	if runtime.GOOS == "windows" {
+		label := "Start with Windows"
+		if isAutostartEnabled() {
+			label = "✓ Start with Windows"
+		}
+		autoItem = fyne.NewMenuItem(label, func() {
+			on := !isAutostartEnabled()
+			if err := setAutostart(on); err != nil {
+				p.setErr("Autostart: " + err.Error())
+				return
+			}
+			if on {
+				autoItem.Label = "✓ Start with Windows"
+				p.setErr("Will start with Windows")
+			} else {
+				autoItem.Label = "Start with Windows"
+				p.setErr("Removed from startup")
+			}
+			if desk, ok := p.app.(desktop.App); ok && p.trayMenu != nil {
+				desk.SetSystemTrayMenu(p.trayMenu)
+			}
+			go func() {
+				time.Sleep(1500 * time.Millisecond)
+				if p.errLabel != nil && (p.errLabel.Text == "Will start with Windows" || p.errLabel.Text == "Removed from startup") {
+					p.setErr("")
+				}
+			}()
+		})
+	}
+
 	quitItem := fyne.NewMenuItem("Quit", func() { p.quit() })
 
-	p.trayMenu = fyne.NewMenu(AppName,
+	items := []*fyne.MenuItem{
 		p.miStatus,
 		fyne.NewMenuItemSeparator(),
 		p.miToggle,
@@ -113,20 +150,22 @@ func (p *Panel) setupTray() {
 		copyItem,
 		logItem,
 		folderItem,
-		fyne.NewMenuItemSeparator(),
-		quitItem,
-	)
+	}
+	if autoItem != nil {
+		items = append(items, autoItem)
+	}
+	items = append(items, fyne.NewMenuItemSeparator(), quitItem)
+
+	p.trayMenu = fyne.NewMenu(AppName, items...)
 	desk.SetSystemTrayMenu(p.trayMenu)
 
-	// Embedded PNG is converted by Fyne to a platform icon (ICO on Windows).
-	// Must be set AFTER SetSystemTrayMenu — otherwise Windows logs
-	// "systray error: unable to set icon: tray not ready yet".
-	icon := fyne.NewStaticResource("home-reality-tray.png", trayIconPNG)
+	// Icon AFTER menu. Prefer embedded PNG; fall back to a generated bitmap
+	// if the embed is missing/corrupt (avoids "image: unknown format").
+	icon := trayIconResource()
 	p.app.SetIcon(icon)
 	desk.SetSystemTrayIcon(icon)
 
-	// Keep the process alive when the window is closed — hide instead of quit.
-	// Use the "Show panel" menu item (Fyne 2.5 has no SetSystemTrayWindow).
+	// Tray-only: never show the window on start. Close hides it.
 	p.win.SetCloseIntercept(func() {
 		p.win.Hide()
 	})
@@ -361,12 +400,59 @@ func (p *Panel) copyURI() {
 }
 
 func (p *Panel) openLog() {
-	path := p.core.LogPath
+	// Prefer app.log (startup / Fyne messages); fall back to sing-box log.
+	appLog := filepath.Join(p.dir, "app.log")
+	path := appLog
+	if _, err := os.Stat(appLog); err != nil {
+		path = p.core.LogPath
+	}
 	if _, err := os.Stat(path); err != nil {
 		p.setErr("No log yet.")
 		return
 	}
 	openPath(path)
+}
+
+// trayIconResource returns a valid PNG resource for the system tray.
+// Uses the embedded asset when it decodes cleanly; otherwise builds a simple
+// green-dot icon in memory so Windows never hits "image: unknown format".
+func trayIconResource() fyne.Resource {
+	if len(trayIconPNG) > 0 {
+		if _, err := png.Decode(bytes.NewReader(trayIconPNG)); err == nil {
+			return fyne.NewStaticResource("home-reality-tray.png", trayIconPNG)
+		}
+	}
+	return fyne.NewStaticResource("home-reality-tray.png", generateTrayIconPNG())
+}
+
+func generateTrayIconPNG() []byte {
+	const s = 64
+	img := image.NewRGBA(image.Rect(0, 0, s, s))
+	// transparent background
+	draw.Draw(img, img.Bounds(), &image.Uniform{C: color.RGBA{0, 0, 0, 0}}, image.Point{}, draw.Src)
+	// dark rounded-ish square (filled circle as stand-in)
+	bg := color.RGBA{R: 0x16, G: 0x18, B: 0x1D, A: 0xFF}
+	green := color.RGBA{R: 0x34, G: 0xC7, B: 0x59, A: 0xFF}
+	white := color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
+	cx, cy := s/2, s/2
+	for y := 0; y < s; y++ {
+		for x := 0; x < s; x++ {
+			dx, dy := x-cx, y-cy
+			r2 := dx*dx + dy*dy
+			if r2 <= 28*28 {
+				img.Set(x, y, bg)
+			}
+			if r2 <= 18*18 {
+				img.Set(x, y, green)
+			}
+			if r2 <= 7*7 {
+				img.Set(x, y, white)
+			}
+		}
+	}
+	var buf bytes.Buffer
+	_ = png.Encode(&buf, img)
+	return buf.Bytes()
 }
 
 func (p *Panel) openFolder() {
