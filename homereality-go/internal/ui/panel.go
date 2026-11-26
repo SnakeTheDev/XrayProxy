@@ -119,14 +119,14 @@ func (p *Panel) setupTray() {
 	desk.SetSystemTrayMenu(p.trayMenu)
 
 	// Embedded PNG is converted by Fyne to a platform icon (ICO on Windows).
+	// Must be set AFTER SetSystemTrayMenu — otherwise Windows logs
+	// "systray error: unable to set icon: tray not ready yet".
 	icon := fyne.NewStaticResource("home-reality-tray.png", trayIconPNG)
 	p.app.SetIcon(icon)
 	desk.SetSystemTrayIcon(icon)
 
-	// Left-click the tray icon opens the panel; right-click shows the menu.
-	desk.SetSystemTrayWindow(p.win)
-
 	// Keep the process alive when the window is closed — hide instead of quit.
+	// Use the "Show panel" menu item (Fyne 2.5 has no SetSystemTrayWindow).
 	p.win.SetCloseIntercept(func() {
 		p.win.Hide()
 	})
