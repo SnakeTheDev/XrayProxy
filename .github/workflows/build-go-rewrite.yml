@@ -13,22 +13,27 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Windows: -H windowsgui = no console (tray-only). Logs → app.log next to the exe.
           - os: windows-latest
             goos: windows
             goarch: amd64
             artifact: HomeReality-windows-amd64.exe
+            ldflags: "-s -w -H windowsgui"
           - os: macos-latest
             goos: darwin
             goarch: arm64
             artifact: HomeReality-darwin-arm64
+            ldflags: "-s -w"
           - os: macos-latest
             goos: darwin
             goarch: amd64
             artifact: HomeReality-darwin-amd64
+            ldflags: "-s -w"
           - os: ubuntu-latest
             goos: linux
             goarch: amd64
             artifact: HomeReality-linux-amd64
+            ldflags: "-s -w"
 
     runs-on: ${{ matrix.os }}
 
@@ -61,13 +66,7 @@ jobs:
           CGO_ENABLED: "1"
         run: |
           mkdir -p ../dist/pkg
-          # Windows: -H windowsgui = no console window (tray-only app).
-          # Logs go to app.log next to the exe. Set HOMEREALITY_DEBUG=1 for console builds.
-          LDFLAGS="-s -w"
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            LDFLAGS="-s -w -H windowsgui"
-          fi
-          go build -ldflags "$LDFLAGS" -o ../dist/pkg/${{ matrix.artifact }} ./cmd/homereality
+          go build -ldflags "${{ matrix.ldflags }}" -o ../dist/pkg/${{ matrix.artifact }} ./cmd/homereality
           cp sing-box-config.json ../dist/pkg/
 
       # upload-artifact already compresses — do not zip again
