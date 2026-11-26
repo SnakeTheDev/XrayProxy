@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -121,5 +122,18 @@ func readJSON(path string, v any) error {
 }
 
 func notifyProxyChanged() {
-	// InternetSetOption via syscall would be ideal; registry change is usually enough for most apps after refresh.
+	// Tell WinINet that proxy settings changed so browsers/apps pick it up
+	// without a restart. INTERNET_OPTION_SETTINGS_CHANGED = 39,
+	// INTERNET_OPTION_REFRESH = 37.
+	mod := windows.NewLazySystemDLL("wininet.dll")
+	proc := mod.NewProc("InternetSetOptionW")
+	if proc.Find() != nil {
+		return
+	}
+	const (
+		INTERNET_OPTION_SETTINGS_CHANGED = 39
+		INTERNET_OPTION_REFRESH          = 37
+	)
+	_, _, _ = proc.Call(0, INTERNET_OPTION_SETTINGS_CHANGED, 0, 0)
+	_, _, _ = proc.Call(0, INTERNET_OPTION_REFRESH, 0, 0)
 }

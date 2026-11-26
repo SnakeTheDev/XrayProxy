@@ -91,13 +91,14 @@ func (p *Panel) setupTray() {
 		return
 	}
 
-	// Use a real, embedded PNG instead of Fyne's default icon. This avoids
-	// depending on an external file and gives Windows a valid tray resource.
-	desk.SetSystemTrayIcon(fyne.NewStaticResource("home-reality-tray.png", trayIconPNG))
-
+	// On Windows the systray is only initialised when SetSystemTrayMenu is
+	// called. Setting the icon before that produces:
+	//   "systray error: unable to set icon: tray not ready yet"
+	// so create the menu first, then the icon.
 	p.miStatus = fyne.NewMenuItem("Status: Disconnected", nil)
 	p.miStatus.Disabled = true
 	p.miToggle = fyne.NewMenuItem("Turn On", func() { p.onToggle() })
+	showItem := fyne.NewMenuItem("Show panel", func() { p.Show() })
 	copyItem := fyne.NewMenuItem("Copy VLESS URI", func() { p.copyURI() })
 	logItem := fyne.NewMenuItem("Open log", func() { p.openLog() })
 	folderItem := fyne.NewMenuItem("Open application folder", func() { p.openFolder() })
@@ -107,6 +108,7 @@ func (p *Panel) setupTray() {
 		p.miStatus,
 		fyne.NewMenuItemSeparator(),
 		p.miToggle,
+		showItem,
 		fyne.NewMenuItemSeparator(),
 		copyItem,
 		logItem,
@@ -116,8 +118,15 @@ func (p *Panel) setupTray() {
 	)
 	desk.SetSystemTrayMenu(p.trayMenu)
 
-	// The window is retained only as an invisible Fyne application owner and
-	// clipboard provider. The tray menu is the user-facing interface.
+	// Embedded PNG is converted by Fyne to a platform icon (ICO on Windows).
+	icon := fyne.NewStaticResource("home-reality-tray.png", trayIconPNG)
+	p.app.SetIcon(icon)
+	desk.SetSystemTrayIcon(icon)
+
+	// Left-click the tray icon opens the panel; right-click shows the menu.
+	desk.SetSystemTrayWindow(p.win)
+
+	// Keep the process alive when the window is closed — hide instead of quit.
 	p.win.SetCloseIntercept(func() {
 		p.win.Hide()
 	})
