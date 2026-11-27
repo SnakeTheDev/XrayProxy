@@ -13,33 +13,33 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Windows: -H windowsgui = no console (tray-only). Logs → app.log next to the exe.
           - os: windows-latest
             goos: windows
             goarch: amd64
             artifact: HomeReality-windows-amd64.exe
-            ldflags: "-s -w -H windowsgui"
+            gui_flags: "-H windowsgui"
           - os: macos-latest
             goos: darwin
             goarch: arm64
             artifact: HomeReality-darwin-arm64
-            ldflags: "-s -w"
+            gui_flags: ""
           - os: macos-latest
             goos: darwin
             goarch: amd64
             artifact: HomeReality-darwin-amd64
-            ldflags: "-s -w"
+            gui_flags: ""
           - os: ubuntu-latest
             goos: linux
             goarch: amd64
             artifact: HomeReality-linux-amd64
-            ldflags: "-s -w"
+            gui_flags: ""
 
     runs-on: ${{ matrix.os }}
 
     defaults:
       run:
         working-directory: homereality-go
+        shell: bash
 
     steps:
       - uses: actions/checkout@v4
@@ -66,10 +66,14 @@ jobs:
           CGO_ENABLED: "1"
         run: |
           mkdir -p ../dist/pkg
-          go build -ldflags "${{ matrix.ldflags }}" -o ../dist/pkg/${{ matrix.artifact }} ./cmd/homereality
+          VER="${GITHUB_SHA:0:7}"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VER="${GITHUB_REF_NAME}"
+          fi
+          LDFLAGS="-s -w ${{ matrix.gui_flags }} -X github.com/SnakeTheDev/XrayProxy/homereality-go/internal/ui.AppVersion=${VER}"
+          go build -ldflags "$LDFLAGS" -o ../dist/pkg/${{ matrix.artifact }} ./cmd/homereality
           cp sing-box-config.json ../dist/pkg/
 
-      # upload-artifact already compresses — do not zip again
       - uses: actions/upload-artifact@v4
         with:
           name: HomeReality-${{ matrix.goos }}-${{ matrix.goarch }}

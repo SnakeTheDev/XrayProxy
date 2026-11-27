@@ -13,16 +13,12 @@ import (
 )
 
 func main() {
-	// Resolve data dir early so we can log next to the binary.
 	dir, err := ui.DataDir()
 	if err != nil {
-		// Last resort before logging is set up.
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	// Always log to app.log next to the binary (works with -H windowsgui / no console).
-	// If HOMEREALITY_DEBUG=1 is set, also mirror to stderr (useful when built with a console).
 	logPath := filepath.Join(dir, "app.log")
 	lf, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err == nil {
@@ -34,7 +30,7 @@ func main() {
 		}
 	}
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.Println("Home-Reality starting, data dir:", dir)
+	log.Println("Home-Reality starting", ui.AppVersion, "dir:", dir)
 
 	a := app.NewWithID("com.homereality.client")
 
@@ -53,7 +49,7 @@ func main() {
 		_ = ui.EnsureConfig(dir, cfgSrc)
 	}
 
-	// Tray-only UI: window is created but never shown unless user picks "Show panel".
+	// Tray context-menu only. Window stays hidden; proxy stays OFF until Turn On.
 	_ = ui.NewPanel(a, dir)
 	a.Run()
 }
