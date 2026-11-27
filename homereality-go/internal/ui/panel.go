@@ -49,8 +49,6 @@ type Panel struct {
 	vCore    *canvas.Text
 	vType    *canvas.Text
 	busy     bool
-	miStatus *fyne.MenuItem
-	miToggle *fyne.MenuItem
 	trayMenu *fyne.Menu
 }
 
@@ -92,80 +90,21 @@ func (p *Panel) setupTray() {
 		return
 	}
 
-	// On Windows the systray is only initialised when SetSystemTrayMenu is
-	// called. Setting the icon before that produces:
-	//   "systray error: unable to set icon: tray not ready yet"
-	// so create the menu first, then the icon.
-	p.miStatus = fyne.NewMenuItem("Status: Disconnected", nil)
-	p.miStatus.Disabled = true
-	p.miToggle = fyne.NewMenuItem("Turn On", func() { p.onToggle() })
-	showItem := fyne.NewMenuItem("Show panel", func() { p.Show() })
-	copyItem := fyne.NewMenuItem("Copy VLESS URI", func() { p.copyURI() })
-	logItem := fyne.NewMenuItem("Open log", func() { p.openLog() })
-	folderItem := fyne.NewMenuItem("Open application folder", func() { p.openFolder() })
-
-	var autoItem *fyne.MenuItem
-	if runtime.GOOS == "windows" {
-		label := "Start with Windows"
-		if isAutostartEnabled() {
-			label = "✓ Start with Windows"
-		}
-		autoItem = fyne.NewMenuItem(label, func() {
-			on := !isAutostartEnabled()
-			if err := setAutostart(on); err != nil {
-				p.setErr("Autostart: " + err.Error())
-				return
-			}
-			if on {
-				autoItem.Label = "✓ Start with Windows"
-				p.setErr("Will start with Windows")
-			} else {
-				autoItem.Label = "Start with Windows"
-				p.setErr("Removed from startup")
-			}
-			if desk, ok := p.app.(desktop.App); ok && p.trayMenu != nil {
-				desk.SetSystemTrayMenu(p.trayMenu)
-			}
-			go func() {
-				time.Sleep(1500 * time.Millisecond)
-				if p.errLabel != nil && (p.errLabel.Text == "Will start with Windows" || p.errLabel.Text == "Removed from startup") {
-					p.setErr("")
-				}
-			}()
-		})
-	}
-
+	// Left-click tray → open panel (SetSystemTrayWindow). Right-click still
+	// needs a minimal menu so the tray exists on all OSes — only Quit.
 	quitItem := fyne.NewMenuItem("Quit", func() { p.quit() })
+	p.trayMenu = fyne.NewMenu(AppName, quitItem)
 
-	items := []*fyne.MenuItem{
-		p.miStatus,
-		fyne.NewMenuItemSeparator(),
-		p.miToggle,
-		showItem,
-		fyne.NewMenuItemSeparator(),
-		copyItem,
-		logItem,
-		folderItem,
-	}
-	if autoItem != nil {
-		items = append(items, autoItem)
-	}
-	items = append(items, fyne.NewMenuItemSeparator(), quitItem)
-
-	p.trayMenu = fyne.NewMenu(AppName, items...)
-
-	// Always use a pure-Go generated PNG. Embedded assets and Fyne's default
-	// BrokenImageIcon (SVG) both caused "image: unknown format" on Windows.
 	icon := fyne.NewStaticResource("home-reality-tray.png", generateTrayIconPNG())
 	p.app.SetIcon(icon)
-	// Store icon before the tray starts so the onReady callback does not fall
-	// back to the SVG default. May log "tray not ready yet" once — harmless.
 	desk.SetSystemTrayIcon(icon)
 	desk.SetSystemTrayMenu(p.trayMenu)
-	// Set again after the tray is live (definitive).
 	desk.SetSystemTrayIcon(icon)
 
-	// Tray-only: never show the window on start. Close hides it.
+	// Left-click / tap tray icon shows the panel (Fyne ≥ 2.7).
+	desk.SetSystemTrayWindow(p.win)
+
+	// Start hidden; close hides instead of quitting.
 	p.win.SetCloseIntercept(func() {
 		p.win.Hide()
 	})
@@ -228,10 +167,11 @@ func (p *Panel) build() {
 		b.Importance = widget.MediumImportance
 		return b
 	}
-	btns := container.NewGridWithColumns(4,
+	btns := container.NewGridWithColumns(5,
 		mkBtn("Copy URI", p.copyURI),
 		mkBtn("Log", p.openLog),
 		mkBtn("Folder", p.openFolder),
+		mkBtn("Startup", p.toggleAutostart),
 		mkBtn("Quit", p.quit),
 	)
 
@@ -316,20 +256,11 @@ func (p *Panel) refresh() {
 	running := p.core.Running()
 	if p.busy {
 		p.toggle.SetState(2)
-		if p.miStatus != nil {
-			p.miStatus.Label = "Status: Working…"
-		}
 		p.status.Text = "Working…"
 		p.status.Color = ColAmber
 		p.sub.Text = ""
-		if p.miToggle != nil {
-			p.miToggle.Label = "…"
-		}
 	} else if running {
 		p.toggle.SetState(1)
-		if p.miStatus != nil {
-			p.miStatus.Label = "Status: Connected"
-		}
 		p.status.Text = "Connected"
 		p.status.Color = ColGreen
 		up := ""
@@ -337,27 +268,14 @@ func (p *Panel) refresh() {
 			up = "Up " + formatUp(time.Since(t)) + "  ·  "
 		}
 		p.sub.Text = up + LocalProxy
-		if p.miToggle != nil {
-			p.miToggle.Label = "Turn Off"
-		}
 	} else {
 		p.toggle.SetState(0)
-		if p.miStatus != nil {
-			p.miStatus.Label = "Status: Disconnected"
-		}
 		p.status.Text = "Disconnected"
 		p.status.Color = ColRed
 		p.sub.Text = "Tap the switch to connect"
-		if p.miToggle != nil {
-			p.miToggle.Label = "Turn On"
-		}
 	}
 	p.status.Refresh()
 	p.sub.Refresh()
-
-	if desk, ok := p.app.(desktop.App); ok && p.trayMenu != nil {
-		desk.SetSystemTrayMenu(p.trayMenu)
-	}
 
 	if p.core.HasBinary() {
 		p.vCore.Text = "sing-box " + download.Version
@@ -411,6 +329,29 @@ func (p *Panel) openLog() {
 		return
 	}
 	openPath(path)
+}
+
+func (p *Panel) toggleAutostart() {
+	if runtime.GOOS != "windows" {
+		p.setErr("Startup option is Windows-only")
+		return
+	}
+	on := !isAutostartEnabled()
+	if err := setAutostart(on); err != nil {
+		p.setErr("Autostart: " + err.Error())
+		return
+	}
+	if on {
+		p.setErr("Will start with Windows")
+	} else {
+		p.setErr("Removed from Windows startup")
+	}
+	go func() {
+		time.Sleep(1500 * time.Millisecond)
+		if p.errLabel != nil && (p.errLabel.Text == "Will start with Windows" || p.errLabel.Text == "Removed from Windows startup") {
+			p.setErr("")
+		}
+	}()
 }
 
 // generateTrayIconPNG builds a simple 64x64 PNG in memory (no embed dependency).
